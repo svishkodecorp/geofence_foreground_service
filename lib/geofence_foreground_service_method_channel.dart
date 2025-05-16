@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:geofence_foreground_service/constants/geofence_event_type.dart';
 import 'package:geofence_foreground_service/models/zone.dart';
 
+import 'constants/api_methods.dart';
 import 'constants/json_keys.dart';
 import 'geofence_foreground_service_platform_interface.dart';
 import 'models/background_task_handlers.dart';
@@ -23,6 +24,9 @@ class MethodChannelGeofenceForegroundService
   @visibleForTesting
   final backgroundChannel = const MethodChannel(
       "ps.byshy.geofence/background_geofence_foreground_service");
+
+  Future<T?> _invokeMethod<T>(String method, [dynamic arguments]) =>
+      foregroundChannel.invokeMethod(method, arguments);
 
   /// This method is used to start the geofencing foreground service
   @override
@@ -61,10 +65,8 @@ class MethodChannelGeofenceForegroundService
       bool didStart = false;
 
       try {
-        didStart = await foregroundChannel.invokeMethod<bool?>(
-              'startGeofencingService',
-              data,
-            ) ??
+        return await _invokeMethod<bool?>(
+                ApiMethods.startGeofencingService, data) ??
             false;
       } catch (e) {
         log(
@@ -91,9 +93,7 @@ class MethodChannelGeofenceForegroundService
 
       return backgroundTriggerHandler(
         call.arguments['ps.byshy.geofence.ZONE_ID'],
-        inputData == null
-            ? GeofenceEventType.unKnown
-            : (jsonDecode(inputData) as int).toGeofenceEventType(),
+        GeofenceEventType.findById(jsonDecode(inputData) as int?),
       );
     });
 
@@ -106,8 +106,7 @@ class MethodChannelGeofenceForegroundService
     bool didStop = false;
 
     try {
-      didStop = await foregroundChannel
-              .invokeMethod<bool?>('stopGeofencingService') ??
+      return await _invokeMethod<bool?>(ApiMethods.stopGeofencingService) ??
           false;
     } catch (e) {
       log(
@@ -125,8 +124,8 @@ class MethodChannelGeofenceForegroundService
     bool isServiceRunning = false;
 
     try {
-      isServiceRunning = await foregroundChannel
-              .invokeMethod<bool?>('isForegroundServiceRunning') ??
+      return await _invokeMethod<bool?>(
+              ApiMethods.isForegroundServiceRunning) ??
           false;
     } catch (e) {
       log(
@@ -146,10 +145,8 @@ class MethodChannelGeofenceForegroundService
     bool isGeofenceAdded = false;
 
     try {
-      isGeofenceAdded = await foregroundChannel.invokeMethod<bool?>(
-            'addGeofence',
-            zone.toJson(),
-          ) ??
+      return await _invokeMethod<bool?>(
+              ApiMethods.addGeofence, zone.toJson()) ??
           false;
     } catch (e) {
       log(
@@ -169,12 +166,8 @@ class MethodChannelGeofenceForegroundService
     bool isGeofenceRemoved = false;
 
     try {
-      isGeofenceRemoved = await foregroundChannel.invokeMethod<bool?>(
-            'removeGeofence',
-            {
-              JsonKeys.zoneId: zoneId,
-            },
-          ) ??
+      return await _invokeMethod<bool?>(
+              ApiMethods.removeGeofence, {JsonKeys.zoneId: zoneId}) ??
           false;
     } catch (e) {
       log(
@@ -192,9 +185,7 @@ class MethodChannelGeofenceForegroundService
     bool areAllAreasRemoved = false;
 
     try {
-      areAllAreasRemoved =
-          await foregroundChannel.invokeMethod<bool?>('removeAllGeoFences') ??
-              false;
+      return await _invokeMethod<bool?>(ApiMethods.removeAllGeoFences) ?? false;
     } catch (e) {
       log(
         e.toString(),

@@ -125,6 +125,14 @@ Future<void> initPlatformState() async {
         id: 'zone#1_id',
         radius: 10000, // measured in meters
         coordinates: timesSquarePolygon,
+        triggers: [
+          GeofenceEventType.dwell,
+          GeofenceEventType.enter,
+          GeofenceEventType.exit
+        ], // Currently, only available on Android
+        expirationDuration: const Duration(days: 1), // Currently, only available on Android
+        dwellLoiteringDelay: const Duration(hours: 1), // Currently, only available on Android
+        initialTrigger: GeofenceEventType.enter, // Currently, only available on Android
       ),
     );
   }
@@ -163,4 +171,9 @@ permissions (it's used in the example too)
 ## Contributing Guidelines
 
 We welcome contributions from the community. If you'd like to contribute to the development of this
-plugin, please feel free to submit a PR to our GitHub repository._
+plugin, please feel free to submit a PR to our GitHub repository.
+
+**Please consider**
+- Making sure that all test cases pass and add new cases if needed
+- Bumping the version of the plugin
+- Adding new changes to the CHANGELOG.md

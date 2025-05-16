@@ -1,13 +1,16 @@
 package com.f2fk.geofence_foreground_service
 
+import android.Manifest
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
@@ -18,6 +21,8 @@ import com.f2fk.geofence_foreground_service.BackgroundWorker.Companion.PAYLOAD_K
 import com.f2fk.geofence_foreground_service.BackgroundWorker.Companion.ZONE_ID
 import com.f2fk.geofence_foreground_service.enums.GeofenceServiceAction
 import com.f2fk.geofence_foreground_service.utils.extraNameGen
+import com.f2fk.geofence_foreground_service.utils.SharedPreferenceHelper
+import com.f2fk.geofence_foreground_service.utils.ServiceConfig
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.GeofencingEvent
 import com.google.android.gms.location.Granularity
@@ -69,58 +74,94 @@ class GeofenceForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) {
-            Log.e(
-                "GeofenceForegroundService",
-                "Received null intent. Restarting service safely with default behavior."
-            )
-            return START_STICKY
-        }
-
-        return try {
-            val geofenceActionStr =
-                intent.getStringExtra(applicationContext!!.extraNameGen(Constants.geofenceAction))
-            val geofenceAction = geofenceActionStr?.let { GeofenceServiceAction.valueOf(it) }
-                ?: return START_STICKY // Handle missing action safely
-
-            val appIcon =
-                intent.getIntExtra(applicationContext!!.extraNameGen(Constants.appIcon), 0)
-            val notificationChannelId =
-                intent.getStringExtra(applicationContext!!.extraNameGen(Constants.channelId))
-                    ?: return START_STICKY
-            val notificationContentTitle =
-                intent.getStringExtra(applicationContext!!.extraNameGen(Constants.contentTitle))
-                    ?: return START_STICKY
-            val notificationContentText =
-                intent.getStringExtra(applicationContext!!.extraNameGen(Constants.contentText))
-                    ?: return START_STICKY
-
-            val notification = NotificationCompat.Builder(this.baseContext, notificationChannelId)
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .setSmallIcon(appIcon)
-                .setContentTitle(notificationContentTitle)
-                .setContentText(notificationContentText)
-
-            when (geofenceAction) {
-                GeofenceServiceAction.SETUP -> {
-                    subscribeToLocationUpdates()
-                    val serviceId = intent.getIntExtra(Constants.serviceId, 525600)
-                    stopForeground(STOP_FOREGROUND_DETACH)
-                    startForeground(
-                        serviceId,
-                        notification.build(),
-                        FOREGROUND_SERVICE_TYPE_LOCATION
-                    )
+            // Try to restart the service with stored configuration
+            val storedConfig = SharedPreferenceHelper.getServiceConfig(applicationContext)
+            if (storedConfig != null) {
+                val restartIntent = Intent(this, GeofenceForegroundService::class.java).apply {
+                    putExtra(applicationContext.extraNameGen(Constants.geofenceAction), GeofenceServiceAction.SETUP.toString())
+                    putExtra(applicationContext.extraNameGen(Constants.channelId), storedConfig.channelId)
+                    putExtra(applicationContext.extraNameGen(Constants.contentTitle), storedConfig.contentTitle)
+                    putExtra(applicationContext.extraNameGen(Constants.contentText), storedConfig.contentText)
+                    putExtra(applicationContext.extraNameGen(Constants.appIcon), storedConfig.appIcon)
+                    putExtra(Constants.serviceId, storedConfig.serviceId)
                 }
-
-                GeofenceServiceAction.TRIGGER -> handleGeofenceEvent(intent)
+                startService(restartIntent)
+                return START_STICKY
             }
-
-            START_STICKY
-        } catch (e: Exception) {
-            Log.e("GeofenceForegroundService", "Error in onStartCommand: ${e.message}", e)
-            START_STICKY
+            // If no stored config exists, stop the service
+            stopSelf()
+            return START_NOT_STICKY
         }
+
+        val geofenceAction: GeofenceServiceAction = GeofenceServiceAction.valueOf(
+            intent.getStringExtra(
+                applicationContext!!.extraNameGen(Constants.geofenceAction)
+            )!!
+        )
+
+        val appIcon: Int = intent.getIntExtra(
+            applicationContext!!.extraNameGen(Constants.appIcon),
+            0
+        )
+
+        val notificationChannelId: String = intent.getStringExtra(
+            applicationContext!!.extraNameGen(Constants.channelId)
+        )!!
+
+        val notificationContentTitle: String = intent.getStringExtra(
+            applicationContext!!.extraNameGen(Constants.contentTitle)
+        )!!
+
+        val notificationContentText: String = intent.getStringExtra(
+            applicationContext!!.extraNameGen(Constants.contentText)
+        )!!
+
+        // Store the service configuration
+        if (geofenceAction == GeofenceServiceAction.SETUP) {
+            val serviceId = intent.getIntExtra(Constants.serviceId, 525600)
+            SharedPreferenceHelper.saveServiceConfig(
+                applicationContext,
+                ServiceConfig(
+                    channelId = notificationChannelId,
+                    contentTitle = notificationContentTitle,
+                    contentText = notificationContentText,
+                    appIcon = appIcon,
+                    serviceId = serviceId
+                )
+            )
+        }
+
+        val notification: NotificationCompat.Builder = NotificationCompat
+            .Builder(
+                this.baseContext,
+                notificationChannelId,
+            )
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSmallIcon(appIcon)
+            .setContentTitle(notificationContentTitle)
+            .setContentText(notificationContentText)
+
+        if (geofenceAction == GeofenceServiceAction.SETUP) {
+            subscribeToLocationUpdates()
+
+            val serviceId: Int = intent.getIntExtra(
+                Constants.serviceId,
+                525600
+            )
+
+            stopForeground(STOP_FOREGROUND_DETACH)
+
+            startForeground(
+                serviceId,
+                notification.build(),
+                FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } else if (geofenceAction == GeofenceServiceAction.TRIGGER) {
+            handleGeofenceEvent(intent)
+        }
+
+        return START_STICKY
     }
 
     private fun handleGeofenceEvent(intent: Intent) {
@@ -141,13 +182,11 @@ class GeofenceForegroundService : Service() {
                 if (zoneID != null) {
                     val oneOffTaskRequest =
                         OneTimeWorkRequest.Builder(BackgroundWorker::class.java)
-                            .setInputData(
-                                buildTaskInputData(
-                                    zoneID,
-                                    isInDebugMode,
-                                    geofenceTransition.toString()
-                                )
-                            )
+                            .setInputData(buildTaskInputData(
+                                zoneID,
+                                isInDebugMode,
+                                geofenceTransition.toString()
+                            ))
                             .build()
 
                     this.baseContext!!.workManager().enqueueUniqueWork(
@@ -170,6 +209,23 @@ class GeofenceForegroundService : Service() {
     }
 
     private fun subscribeToLocationUpdates() {
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return
+        }
         fusedLocationProviderClient.requestLocationUpdates(
             locationRequest,
             locationCallback,

@@ -99,6 +99,17 @@ class _MyAppState extends State<MyApp> {
         radius: 1000, // measured in meters
         coordinates: [_londonCityCenter],
         notificationResponsivenessMs: 15 * 1000, // 15 seconds
+        triggers: [
+          GeofenceEventType.dwell,
+          GeofenceEventType.enter,
+          GeofenceEventType.exit
+        ], // Currently, only available on Android
+        expirationDuration:
+            const Duration(days: 1), // Currently, only available on Android
+        dwellLoiteringDelay:
+            const Duration(hours: 1), // Currently, only available on Android
+        initialTrigger:
+            GeofenceEventType.enter, // Currently, only available on Android
       ),
     );
   }
