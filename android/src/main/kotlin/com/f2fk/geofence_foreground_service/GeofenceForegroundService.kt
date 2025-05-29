@@ -74,23 +74,7 @@ class GeofenceForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) {
-            // Try to restart the service with stored configuration
-            val storedConfig = SharedPreferenceHelper.getServiceConfig(applicationContext)
-            if (storedConfig != null) {
-                val restartIntent = Intent(this, GeofenceForegroundService::class.java).apply {
-                    putExtra(applicationContext.extraNameGen(Constants.geofenceAction), GeofenceServiceAction.SETUP.toString())
-                    putExtra(applicationContext.extraNameGen(Constants.channelId), storedConfig.channelId)
-                    putExtra(applicationContext.extraNameGen(Constants.contentTitle), storedConfig.contentTitle)
-                    putExtra(applicationContext.extraNameGen(Constants.contentText), storedConfig.contentText)
-                    putExtra(applicationContext.extraNameGen(Constants.appIcon), storedConfig.appIcon)
-                    putExtra(Constants.serviceId, storedConfig.serviceId)
-                }
-                startService(restartIntent)
-                return START_STICKY
-            }
-            // If no stored config exists, stop the service
-            stopSelf()
-            return START_NOT_STICKY
+            return START_STICKY
         }
 
         val geofenceAction: GeofenceServiceAction = GeofenceServiceAction.valueOf(
